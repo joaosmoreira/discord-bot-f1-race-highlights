@@ -21,19 +21,32 @@ const DISCORD_CHANNEL_ID = process.env.DISCORD_CHANNEL_ID;
 
 const youtube = google.youtube({ version: "v3", auth: YOUTUBE_API_KEY });
 
-// Guarda o último vídeo enviado
-let lastVideoUrl = "";
+let lastVideoUrl = null; // Guarda o último vídeo encontrado
 
-// Função para buscar o vídeo mais recente de "Race Highlights"
-async function checkNewVideo(sendMessage = true) {
+// Função para calcular a última sexta-feira
+function getLastFriday() {
+  const today = new Date();
+  const lastFriday = new Date(today);
+  lastFriday.setDate(today.getDate() - ((today.getDay() + 2) % 7)); // Ajusta para sexta-feira anterior
+  return lastFriday.toISOString();
+}
+
+// Função para verificar novos vídeos de Race Highlights
+async function checkNewVideo() {
   try {
+    const lastFriday = getLastFriday();
+
     const res = await youtube.search.list({
       part: "snippet",
       channelId: CHANNEL_ID,
-      order: "date", // Ordenar por data (mais recente primeiro)
-      maxResults: 1, // Apenas o vídeo mais recente
+      order: "date",
+      maxResults: 5, // Pega os 5 mais recentes
       q: "Race Highlights", // Filtro de pesquisa
+      publishedAfter: lastFriday, // Publicados após a última sexta-feira
     });
+
+    console.log("Vídeos encontrados:");
+    res.data.items.forEach((video) => console.log(video.snippet.title));
 
     if (res.data.items.length > 0) {
       const latestVideo = res.data.items[0];
@@ -45,50 +58,37 @@ async function checkNewVideo(sendMessage = true) {
         !videoTitle.includes("fp2") &&
         !videoTitle.includes("fp3")
       ) {
-        if (videoUrl !== lastVideoUrl || !sendMessage) {
-          lastVideoUrl = videoUrl;
-          if (sendMessage) {
-            const channel = await client.channels.fetch(DISCORD_CHANNEL_ID);
-            channel.send(`Há highlights novos carago: ${videoUrl}`);
-          }
-        }
+        lastVideoUrl = videoUrl; // Guarda o último vídeo
+
+        const channel = await client.channels.fetch(DISCORD_CHANNEL_ID);
+        channel.send(`Há highlights novos carago: ${videoUrl}`);
       } else {
-        console.log("Último vídeo não é um Race Highlights válido.");
+        console.log("Não quero FP2 nem FP3 caragos");
       }
     } else {
-      console.log("Nenhum vídeo encontrado.");
+      console.log("Nenhum vídeo de Race Highlights encontrado.");
     }
   } catch (error) {
     console.error("Erro ao verificar vídeos do YouTube:", error);
   }
 }
 
-// Evento quando o bot está pronto
-client.once("ready", async () => {
-  console.log("Bot online! POWER");
-  await checkNewVideo(); // Verificar o vídeo ao iniciar
-  setInterval(checkNewVideo, 60000); // Verificar a cada 60 segundos
-});
-
-// Evento para ouvir mensagens no chat
+// Comando !ultimo para enviar o último vídeo encontrado
 client.on("messageCreate", async (message) => {
-  if (message.author.bot) return; // Ignora mensagens de outros bots
-
-  if (message.content.toLowerCase() === "!ultimo") {
+  if (message.content === "!ultimo") {
     if (lastVideoUrl) {
-      message.channel.send(`Último vídeo de Race Highlights: ${lastVideoUrl}`);
+      message.channel.send(`Aqui está o último vídeo: ${lastVideoUrl}`);
     } else {
-      await checkNewVideo(false); // Busca o vídeo sem enviar mensagem automática
-      if (lastVideoUrl) {
-        message.channel.send(
-          `Último vídeo de Race Highlights: ${lastVideoUrl}`,
-        );
-      } else {
-        message.channel.send("Ainda não há highlights disponíveis carago!");
-      }
+      message.channel.send("Ainda não encontrei nenhum highlights, carago!");
     }
   }
 });
 
-// Login do bot no Discord
+// Configuração do bot no Discord
+client.once("ready", () => {
+  console.log("Bot online! POWER");
+  checkNewVideo(); // Verifica ao iniciar
+  setInterval(checkNewVideo, 60000); // Verifica a cada 60 segundos
+});
+
 client.login(DISCORD_TOKEN);
