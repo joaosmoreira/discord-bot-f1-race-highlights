@@ -57,36 +57,34 @@ async function checkNewVideo() {
       publishedBefore: nextMonday, // Publicados antes da próxima segunda-feira
     });
 
-    console.log("Vídeos encontrados:");
-    res.data.items.forEach((item) => {
-      console.log(item.snippet.title);
-    });
+    console.log("Resposta da API do YouTube:");
+    console.log(res.data.items); // Log para ver todos os vídeos retornados
 
     // Verifica se há vídeos
     if (res.data.items.length > 0) {
       const latestVideo = res.data.items[0];
       const videoUrl = `https://www.youtube.com/watch?v=${latestVideo.id.videoId}`;
-
-      // Expressão regular para encontrar "Race Highlights" de qualquer forma
-      const highlightsRegex = /\brace highlights\b/i;
-
-      // Verifica se o título contém "Race Highlights" e não contém FP2 ou FP3
       const videoTitle = latestVideo.snippet.title.toLowerCase();
       const videoDescription = latestVideo.snippet.description.toLowerCase();
 
+      console.log(`Último vídeo encontrado: ${videoTitle}`);
+
+      // Filtro específico para "Race Highlights |"
       if (
-        highlightsRegex.test(latestVideo.snippet.title) &&
+        videoTitle.includes("race highlights |") &&
         !videoTitle.includes("fp2") &&
         !videoTitle.includes("fp3") &&
         !videoDescription.includes("fp2") &&
         !videoDescription.includes("fp3")
       ) {
         lastVideoUrl = videoUrl; // Guarda o último vídeo encontrado
+        console.log(`Vídeo válido encontrado: ${videoUrl}`);
 
+        // Enviar para o canal do Discord
         const channel = await client.channels.fetch(DISCORD_CHANNEL_ID);
         channel.send(`Há highlights novos carago: ${videoUrl}`);
       } else {
-        console.log("Não quero FP2 nem FP3 caragos");
+        console.log("Vídeo descartado: FP2 ou FP3 encontrado");
       }
     } else {
       console.log(
