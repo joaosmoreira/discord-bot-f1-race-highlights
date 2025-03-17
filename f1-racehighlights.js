@@ -69,7 +69,7 @@ async function checkNewVideo() {
 
       console.log(`Último vídeo encontrado: ${videoTitle}`);
 
-      // Filtro específico para "Race Highlights |"
+      // Filtro específico para "Race Highlights |", ignorando maiúsculas/minúsculas
       if (
         videoTitle.includes("race highlights |") &&
         !videoTitle.includes("fp2") &&
