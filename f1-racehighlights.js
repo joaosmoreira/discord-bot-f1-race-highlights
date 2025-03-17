@@ -21,44 +21,67 @@ const DISCORD_CHANNEL_ID = process.env.DISCORD_CHANNEL_ID;
 
 const youtube = google.youtube({ version: "v3", auth: YOUTUBE_API_KEY });
 
-let lastVideoUrl = null; // Guarda o último vídeo encontrado
+// Variável global para guardar o último vídeo
+let lastVideoUrl = "";
 
-// Função para calcular a última sexta-feira
-function getLastFriday() {
+// Função para calcular as datas da última sexta-feira e próxima segunda-feira
+function getLastFridayAndNextMonday() {
   const today = new Date();
+
+  // Encontra a data da última sexta-feira
   const lastFriday = new Date(today);
   lastFriday.setDate(today.getDate() - ((today.getDay() + 2) % 7)); // Ajusta para sexta-feira anterior
-  return lastFriday.toISOString();
+
+  // Encontra a data da próxima segunda-feira
+  const nextMonday = new Date(today);
+  nextMonday.setDate(today.getDate() + ((8 - today.getDay()) % 7)); // Ajusta para segunda-feira seguinte
+
+  return {
+    lastFriday: lastFriday.toISOString(),
+    nextMonday: nextMonday.toISOString(),
+  };
 }
 
-// Função para verificar novos vídeos de Race Highlights
+// Função para verificar novos vídeos de Race Highlights entre Sexta e Segunda
 async function checkNewVideo() {
   try {
-    const lastFriday = getLastFriday();
+    const { lastFriday, nextMonday } = getLastFridayAndNextMonday();
 
     const res = await youtube.search.list({
       part: "snippet",
       channelId: CHANNEL_ID,
-      order: "date",
-      maxResults: 5, // Pega os 5 mais recentes
+      order: "date", // Ordenar por data (mais recente primeiro)
+      maxResults: 5, // Para evitar spams, podemos pegar os 5 mais recentes
       q: "Race Highlights", // Filtro de pesquisa
       publishedAfter: lastFriday, // Publicados após a última sexta-feira
+      publishedBefore: nextMonday, // Publicados antes da próxima segunda-feira
     });
 
     console.log("Vídeos encontrados:");
-    res.data.items.forEach((video) => console.log(video.snippet.title));
+    res.data.items.forEach((item) => {
+      console.log(item.snippet.title);
+    });
 
+    // Verifica se há vídeos
     if (res.data.items.length > 0) {
       const latestVideo = res.data.items[0];
       const videoUrl = `https://www.youtube.com/watch?v=${latestVideo.id.videoId}`;
+
+      // Expressão regular para encontrar "Race Highlights" de qualquer forma
+      const highlightsRegex = /\brace highlights\b/i;
+
+      // Verifica se o título contém "Race Highlights" e não contém FP2 ou FP3
       const videoTitle = latestVideo.snippet.title.toLowerCase();
+      const videoDescription = latestVideo.snippet.description.toLowerCase();
 
       if (
-        videoTitle.includes("race highlights") &&
+        highlightsRegex.test(latestVideo.snippet.title) &&
         !videoTitle.includes("fp2") &&
-        !videoTitle.includes("fp3")
+        !videoTitle.includes("fp3") &&
+        !videoDescription.includes("fp2") &&
+        !videoDescription.includes("fp3")
       ) {
-        lastVideoUrl = videoUrl; // Guarda o último vídeo
+        lastVideoUrl = videoUrl; // Guarda o último vídeo encontrado
 
         const channel = await client.channels.fetch(DISCORD_CHANNEL_ID);
         channel.send(`Há highlights novos carago: ${videoUrl}`);
@@ -66,20 +89,22 @@ async function checkNewVideo() {
         console.log("Não quero FP2 nem FP3 caragos");
       }
     } else {
-      console.log("Nenhum vídeo de Race Highlights encontrado.");
+      console.log(
+        "Nenhum vídeo de Race Highlights encontrado entre Sexta e Segunda.",
+      );
     }
   } catch (error) {
     console.error("Erro ao verificar vídeos do YouTube:", error);
   }
 }
 
-// Comando !ultimo para enviar o último vídeo encontrado
-client.on("messageCreate", async (message) => {
+// Comando para enviar o último vídeo
+client.on("messageCreate", (message) => {
   if (message.content === "!ultimo") {
     if (lastVideoUrl) {
-      message.channel.send(`Aqui está o último vídeo: ${lastVideoUrl}`);
+      message.channel.send(`O último vídeo de highlights: ${lastVideoUrl}`);
     } else {
-      message.channel.send("Ainda não encontrei nenhum highlights, carago!");
+      message.channel.send("Ainda não encontrei nenhum vídeo de highlights.");
     }
   }
 });
@@ -87,8 +112,8 @@ client.on("messageCreate", async (message) => {
 // Configuração do bot no Discord
 client.once("ready", () => {
   console.log("Bot online! POWER");
-  checkNewVideo(); // Verifica ao iniciar
-  setInterval(checkNewVideo, 60000); // Verifica a cada 60 segundos
+  checkNewVideo(); // Verificar vídeo ao iniciar
+  setInterval(checkNewVideo, 60000); // Verificar de 60 em 60 segundos
 });
 
 client.login(DISCORD_TOKEN);
